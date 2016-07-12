@@ -1,0 +1,159 @@
+---
+title: "01_locarnoMap"
+author: "Duc-Quang Nguyen"
+date: "28 June 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(magrittr)
+library(tidyr)
+library(countrycode)
+library(swiMap)
+require(rgdal)
+library(rgeos)
+library(maptools)
+require(ggplot2)
+library(swiTheme)
+library(ggmap)
+library(gganimate)
+
+geocodeLocations <- F
+data.file <- "input/pardoDoro_map.Rdata"
+#tween.file <- "input/tweenMap.Rdata"
+
+fillColor <- "#FFDE01" #"#e6e600"
+
+```
+
+```{r get award and map data}
+data.read <- read.csv("data/Pardo d'oro - country simplified.csv", stringsAsFactors = F)
+
+data <- by(data.read, data.read$Year, function(dd) as.list(dd))
+
+data <- lapply(data, function(dd) {
+	countries <- unlist(strsplit(dd$Country, "\\/"))
+	countries <- unlist(lapply(lapply(countries, function(cc) gsub("^\\s+", "", cc)), function(cc) gsub("\\s+$", "", cc)))
+	c(dd, countries = list(countries))
+})
+
+
+path <- getPathShp('world')
+layers <-  ogrListLayers(path)
+# read shapefiles for given layer
+world.df <- formatShp(readOGR(path, layer = layers[1]))
+
+
+
+## geocode of country
+if(!geocodeLocations) {
+  load(data.file)
+} else {
+	countryList <- unique(unlist(lapply(data, function(dd) dd$countries)))
+	countryList <- structure(countryList, names = countryList)
+
+	## Hack rename old countries
+	idx <- match(c('Soviet Union'), countryList)
+	countryList[idx] <- c("USSR")
+	
+	lonlat <- geocode(countryList, messaging = T, output ="more")
+  lonlat$iso2c <- countrycode(lonlat$.id, "country.name", "iso2c")
+  stopifnot(!any(is.na(lonlat$iso2c)))
+  
+  data <- lapply(data, function(dd){
+	  idx <- match(dd$countries, lonlat$.id)
+	  c(dd, lonlat = list(lonlat[idx,c('lon', 'lat')]), 
+	  iso2c = list(lonlat[idx,'iso2c']))
+  })
+  
+  save(data, file = data.file)
+}
+
+```
+
+```{r test plot a globe map}
+base.m <- world.df %>% select(-LON, -LAT, -SUBREGION, -REGION, -POP2005, -AREA, -UN, -ISO3, -FIPS, -id, -order, -NAME, -piece)
+
+maps <- do.call(rbind, lapply(data, function(dd) {
+  cat("\n", dd$Year)
+  
+  mm <- base.m
+  mm$color <- ifelse(mm$ISO2 %in% dd$iso2c, "#1a1a1a", fillColor)
+  mm$lon.view <- mean(dd$lonlat$lon)
+  mm$lat.view <- mean(dd$lonlat$lat)
+  mm$year <- unique(dd$Year)
+  mm
+}))
+
+y <- 1971
+
+mytheme <- function() {
+  swi_theme(y_gridlines = F, base_size = 15) +
+      theme(
+        legend.position = "none",
+        panel.background = element_rect(fill = '#f7f5ed', size = 0),
+        plot.background = element_rect(fill = '#f7f5ed', size = 0),
+        plot.title = element_text(family="Open Sans", size = 24, margin=margin(b=15), face = "bold"),
+        plot.subtitle = element_text(size = 18),
+        panel.grid = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        axis.title = element_blank(),
+        axis.text = element_blank()
+      )
+}
+
+
+library(animation)
+saveGIF( {
+  
+  intro <- ggplot(base.m, aes(x = long, y = lat, group = group)) +
+      geom_polygon(size = 0.2, fill = fillColor, colour = "#ffffb3") +
+      mytheme() + 
+      labs(title = "", caption = "source: Festival del film Locarno | swissinfo.ch") + 
+    coord_map("ortho", orientation = c(46.8, 8.23, 0)) + 
+    annotate("text", label = "All the Golden Leopard awarded \nat the Locarno film festival since 1968", 
+             y = 46.8, x = 8.23, hjust = 0.5, vjust = 0.5, family = "Open Sans Condensed Bold", size = 10)
+  print(intro)
+  
+  sapply(unique(maps$year), function(y) {
+    dd <- filter(maps, year == y) 
+    
+    tt <- data[[as.character(y)]]
+    tt$x <- unique(dd$lon.view)  + 90
+    tt$y <- unique(dd$lat.view) + 90
+
+    wm <- ggplot(dd, aes(x = long, y = lat, group = group)) +
+      geom_polygon(size = 0.2, aes(fill = color), colour = "#ffffb3") +
+      scale_fill_manual(values = c( "#333300", fillColor)) +
+      mytheme() + 
+      labs(title = y, caption = "source: Festival del film Locarno | swissinfo.ch")
+    
+    wmt <- wm +  
+      annotate("text", label = as.character(tt$Film[1]), x = tt$x, y = tt$y, family = "Open Sans Condensed Bold", hjust = 0, vjust = 0.8, size = 7) +
+      annotate("text", label = as.character(paste0(tt$Original.Title[1], " (", tt$Country[1], ")")), x = tt$x, y = tt$y, family = "Open Sans Condensed Light", hjust = 0, vjust = -0.5, size = 7, fontface = 3) + 
+      annotate("text", label = as.character(tt$Director[1]), x = tt$x, y = tt$y, family = "Open Sans Condensed Light", hjust = 0, vjust = 2.7, size = 5) 
+    
+    if(length(tt$Film) > 1) {
+    wmt <- wmt +  
+      annotate("text", label = as.character(tt$Film[2]), x = tt$x + 55, y = tt$y, family = "Open Sans Condensed Bold", hjust = 1, vjust = 0.8, size = 7) +
+      annotate("text", label = as.character(paste0(tt$Original.Title[2], " (", tt$Country[2], ")")), x = tt$x+ 55, y = tt$y, family = "Open Sans Condensed Light", hjust = 1, vjust = -0.5, size = 7, fontface = 3) + 
+      annotate("text", label = as.character(tt$Director[2]), x = tt$x+ 55, y = tt$y, family = "Open Sans Condensed Light", hjust = 1, vjust = 2.7, size = 5) +  
+     
+      annotate("text", label = as.character(tt$Film[3]), x = tt$x, y = tt$y -50, family = "Open Sans Condensed Bold", hjust = 0, vjust = 0.8, size = 7) +
+      annotate("text", label = as.character(paste0(tt$Original.Title[3], " (", tt$Country[3], ")")), x = tt$x, y = tt$y-50, family = "Open Sans Condensed Light", hjust = 0, vjust = -0.5, size = 7, fontface = 3) + 
+      annotate("text", label = as.character(tt$Director[3]), x = tt$x, y = tt$y-50, family = "Open Sans Condensed Light", hjust = 0, vjust = 2.7, size = 5) +
+      
+      annotate("text", label = as.character(tt$Film[4]), x = tt$x+ 50, y = tt$y -50, family = "Open Sans Condensed Bold", hjust = 1, vjust = 0.8, size = 7) +
+      annotate("text", label = as.character(paste0(tt$Original.Title[4], " (", tt$Country[4], ")")), x = tt$x+ 50, y = tt$y-50, family = "Open Sans Condensed Light", hjust = 1, vjust = -0.5, size = 7, fontface = 3) + 
+      annotate("text", label = as.character(tt$Director[4]), x = tt$x+ 50, y = tt$y-50, family = "Open Sans Condensed Light", hjust = 1, vjust = 2.7, size = 5) 
+    }
+    
+    print(wmt + coord_map("ortho", orientation = c(unique(dd$lat.view), unique(dd$lon.view), 0)))
+  }) 
+}, movie.name = "pardodoro_map.gif", interval = 3.5, nmax = 50, ani.width = 640,
+        ani.height = 640)
+
+
+```
