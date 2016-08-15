@@ -17,13 +17,17 @@ library(maptools)
 require(ggplot2)
 library(swiTheme)
 library(ggmap)
-library(gganimate)
+library(animation)
 
 geocodeLocations <- F
 data.file <- "input/pardoDoro_map.Rdata"
 #tween.file <- "input/tweenMap.Rdata"
 
 fillColor <- "#FFDE01" #"#e6e600"
+
+film.txt.size  <- 7
+original.txt.size  <- 6.6 
+director.txt.size <- 5.5
 
 ```
 
@@ -86,16 +90,16 @@ maps <- do.call(rbind, lapply(data, function(dd) {
   mm
 }))
 
-y <- 1971
+y <- 2005
 
 mytheme <- function() {
   swi_theme(y_gridlines = F, base_size = 15) +
       theme(
         legend.position = "none",
-        panel.background = element_rect(fill = '#f7f5ed', size = 0),
-        plot.background = element_rect(fill = '#f7f5ed', size = 0),
-        plot.title = element_text(family="Open Sans", size = 24, margin=margin(b=15), face = "bold"),
-        plot.subtitle = element_text(size = 18),
+        panel.background = element_rect(fill = '#fffce6', size = 0),
+        plot.background = element_rect(fill = '#fffce6', size = 0),
+        plot.title = element_text(family="Open Sans Condensed Light", size = 54, margin=margin(b = 5), hjust = 0.5, colour = "#4d4200"),
+        plot.caption = element_text(size = 12),
         panel.grid = element_blank(),
         axis.ticks = element_blank(),
         axis.line = element_blank(),
@@ -104,18 +108,18 @@ mytheme <- function() {
       )
 }
 
+caption <- "source: Festival del film Locarno | swissinfo.ch "
 
-library(animation)
 saveGIF( {
   
-  intro <- ggplot(base.m, aes(x = long, y = lat, group = group)) +
-      geom_polygon(size = 0.2, fill = fillColor, colour = "#ffffb3") +
-      mytheme() + 
-      labs(title = "", caption = "source: Festival del film Locarno | swissinfo.ch") + 
-    coord_map("ortho", orientation = c(46.8, 8.23, 0)) + 
-    annotate("text", label = "All the Golden Leopard awarded \nat the Locarno film festival since 1968", 
-             y = 46.8, x = 8.23, hjust = 0.5, vjust = 0.5, family = "Open Sans Condensed Bold", size = 10)
-  print(intro)
+  # intro <- ggplot(base.m, aes(x = long, y = lat, group = group)) +
+  #     geom_polygon(size = 0.2, fill = fillColor, colour = "#ffffb3") +
+  #     mytheme() + 
+  #     labs(title = "", caption = caption) + 
+  #   coord_map("ortho", orientation = c(46.8, 8.23, 0)) + 
+  #   annotate("text", label = "The Golden Leopard awarded \nat the Locarno film festival since 1968", 
+  #            y = 46.8, x = 8.23, hjust = 0.5, vjust = 0.5, family = "Open Sans Condensed Bold", size = 10)
+  # print(intro)
   
   sapply(unique(maps$year), function(y) {
     dd <- filter(maps, year == y) 
@@ -123,36 +127,51 @@ saveGIF( {
     tt <- data[[as.character(y)]]
     tt$x <- unique(dd$lon.view)  + 90
     tt$y <- unique(dd$lat.view) + 90
-
+    # hack for 2014
+    if(y == 2014) {
+      tt$y <- tt$y - 30
+      tt$x <- tt$x - 120
+    }
+        # hack for 2005
+    if(y == 2005) {
+      tt$x <- tt$x + 33
+    }
+    
     wm <- ggplot(dd, aes(x = long, y = lat, group = group)) +
       geom_polygon(size = 0.2, aes(fill = color), colour = "#ffffb3") +
       scale_fill_manual(values = c( "#333300", fillColor)) +
       mytheme() + 
-      labs(title = y, caption = "source: Festival del film Locarno | swissinfo.ch")
+      labs(title = y, caption = caption)
     
     wmt <- wm +  
-      annotate("text", label = as.character(tt$Film[1]), x = tt$x, y = tt$y, family = "Open Sans Condensed Bold", hjust = 0, vjust = 0.8, size = 7) +
-      annotate("text", label = as.character(paste0(tt$Original.Title[1], " (", tt$Country[1], ")")), x = tt$x, y = tt$y, family = "Open Sans Condensed Light", hjust = 0, vjust = -0.5, size = 7, fontface = 3) + 
-      annotate("text", label = as.character(tt$Director[1]), x = tt$x, y = tt$y, family = "Open Sans Condensed Light", hjust = 0, vjust = 2.7, size = 5) 
+      annotate("text", label = as.character(tt$Film[1]), x = tt$x, y = tt$y, family = "Open Sans Condensed Bold", hjust = 0, vjust = 0.8, size = film.txt.size) +
+      annotate("text", label = as.character(paste0(tt$Original.Title[1], " (", tt$Country[1], ")")), x = tt$x, y = tt$y, family = "Open Sans Condensed Light", hjust = 0, vjust = -0.5, size = original.txt.size, fontface = 3) + 
+      annotate("text", label = as.character(tt$Director[1]), x = tt$x, y = tt$y, family = "Open Sans Condensed Light", hjust = 0, vjust = 2.7, size = director.txt.size) 
     
     if(length(tt$Film) > 1) {
+      xoffset <- 60
+      wmt <- wmt +  
+        annotate("text", label = as.character(tt$Film[2]), x = tt$x + xoffset, y = tt$y, family = "Open Sans Condensed Bold", hjust = 1, vjust = 0.8, size = film.txt.size) +
+        annotate("text", label = as.character(paste0(tt$Original.Title[2], " (", tt$Country[2], ")")), x = tt$x + xoffset, y = tt$y, family = "Open Sans Condensed Light", hjust = 1, vjust = -0.5, size = original.txt.size, fontface = 3) + 
+        annotate("text", label = as.character(tt$Director[2]), x = tt$x + xoffset, y = tt$y, family = "Open Sans Condensed Light", hjust = 1, vjust = 2.7, size = director.txt.size) 
+    }
+    if(length(tt$Film) >= 3) { 
+      yoffset <-  -50
     wmt <- wmt +  
-      annotate("text", label = as.character(tt$Film[2]), x = tt$x + 55, y = tt$y, family = "Open Sans Condensed Bold", hjust = 1, vjust = 0.8, size = 7) +
-      annotate("text", label = as.character(paste0(tt$Original.Title[2], " (", tt$Country[2], ")")), x = tt$x+ 55, y = tt$y, family = "Open Sans Condensed Light", hjust = 1, vjust = -0.5, size = 7, fontface = 3) + 
-      annotate("text", label = as.character(tt$Director[2]), x = tt$x+ 55, y = tt$y, family = "Open Sans Condensed Light", hjust = 1, vjust = 2.7, size = 5) +  
-     
-      annotate("text", label = as.character(tt$Film[3]), x = tt$x, y = tt$y -50, family = "Open Sans Condensed Bold", hjust = 0, vjust = 0.8, size = 7) +
-      annotate("text", label = as.character(paste0(tt$Original.Title[3], " (", tt$Country[3], ")")), x = tt$x, y = tt$y-50, family = "Open Sans Condensed Light", hjust = 0, vjust = -0.5, size = 7, fontface = 3) + 
-      annotate("text", label = as.character(tt$Director[3]), x = tt$x, y = tt$y-50, family = "Open Sans Condensed Light", hjust = 0, vjust = 2.7, size = 5) +
-      
-      annotate("text", label = as.character(tt$Film[4]), x = tt$x+ 50, y = tt$y -50, family = "Open Sans Condensed Bold", hjust = 1, vjust = 0.8, size = 7) +
-      annotate("text", label = as.character(paste0(tt$Original.Title[4], " (", tt$Country[4], ")")), x = tt$x+ 50, y = tt$y-50, family = "Open Sans Condensed Light", hjust = 1, vjust = -0.5, size = 7, fontface = 3) + 
-      annotate("text", label = as.character(tt$Director[4]), x = tt$x+ 50, y = tt$y-50, family = "Open Sans Condensed Light", hjust = 1, vjust = 2.7, size = 5) 
+      annotate("text", label = as.character(tt$Film[3]), x = tt$x, y = tt$y + yoffset, family = "Open Sans Condensed Bold", hjust = 0, vjust = 0.8, size = film.txt.size) +
+      annotate("text", label = as.character(paste0(tt$Original.Title[3], " (", tt$Country[3], ")")), x = tt$x, y = tt$y + yoffset, family = "Open Sans Condensed Light", hjust = 0, vjust = -0.5, size = original.txt.size, fontface = 3) + 
+      annotate("text", label = as.character(tt$Director[3]), x = tt$x, y = tt$y + yoffset, family = "Open Sans Condensed Light", hjust = 0, vjust = 2.7, size = director.txt.size)
+    }
+    if(length(tt$Film) >= 4) {   
+    wmt <- wmt +  
+      annotate("text", label = as.character(tt$Film[4]), x = tt$x + xoffset, y = tt$y + yoffset, family = "Open Sans Condensed Bold", hjust = 1, vjust = 0.8, size = film.txt.size) +
+      annotate("text", label = as.character(paste0(tt$Original.Title[4], " (", tt$Country[4], ")")), x = tt$x + xoffset, y = tt$y + yoffset, family = "Open Sans Condensed Light", hjust = 1, vjust = -0.5, size = original.txt.size, fontface = 3) + 
+      annotate("text", label = as.character(tt$Director[4]), x = tt$x + xoffset, y = tt$y + yoffset, family = "Open Sans Condensed Light", hjust = 1, vjust = 2.7, size = director.txt.size) 
     }
     
     print(wmt + coord_map("ortho", orientation = c(unique(dd$lat.view), unique(dd$lon.view), 0)))
   }) 
-}, movie.name = "pardodoro_map.gif", interval = 3.5, nmax = 50, ani.width = 640,
+}, movie.name = "pardodoro_map.gif", interval = 4.2, nmax = 50, ani.width = 640,
         ani.height = 640)
 
 
